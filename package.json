@@ -1,9 +1,0 @@
-{
-  "name": "casamento-wdmar-adylla",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Site do casamento — funções serverless (Vercel) para pagamento via Stripe",
-  "dependencies": {
-    "stripe": "^17.0.0"
-  }
-}
