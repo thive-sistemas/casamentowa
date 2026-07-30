@@ -20,11 +20,6 @@ module.exports = async (req, res) => {
     return;
   }
 
-  if (!connectOptions) {
-    res.status(500).json({ error: "STRIPE_CONNECTED_ACCOUNT_ID não configurada." });
-    return;
-  }
-
   try {
     const sessionId = req.query.session_id;
     if (!sessionId) {
@@ -32,7 +27,10 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const session = await stripe.checkout.sessions.retrieve(sessionId, connectOptions);
+    const session = await stripe.checkout.sessions.retrieve(
+      sessionId,
+      connectOptions || undefined
+    );
 
     res.status(200).json({
       paid: session.payment_status === "paid",
@@ -40,6 +38,7 @@ module.exports = async (req, res) => {
       giftId: session.metadata ? session.metadata.giftId : "",
       giftName: session.metadata ? session.metadata.giftName : "",
       presenteadoPor: session.metadata ? session.metadata.presenteadoPor : "",
+      mensagem: session.metadata ? session.metadata.mensagem : "",
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

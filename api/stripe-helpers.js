@@ -12,7 +12,6 @@ function getConnectedAccountId() {
   return id;
 }
 
-/** Opções para cobrança direta na conta conectada (Stripe Connect). */
 function getConnectRequestOptions() {
   const stripeAccount = getConnectedAccountId();
   if (!stripeAccount) return null;
@@ -26,7 +25,7 @@ function setCors(req, res, methods = "GET, POST, OPTIONS") {
     res.setHeader("Vary", "Origin");
   }
   res.setHeader("Access-Control-Allow-Methods", methods);
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Connect-Admin-Secret");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
 module.exports = {
