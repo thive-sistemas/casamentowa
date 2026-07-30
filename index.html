@@ -1000,16 +1000,8 @@ const CONFIG = {
   pixMerchantName: "ADYLLA SOUZA",
   pixMerchantCity: "CUPIRA",
   weddingDate: "2026-10-10T15:30:00",
-  guestList: [
-    "Ana Paula Silva",
-    "Carlos Eduardo Santos",
-    "Fernanda Lima",
-    "João Pedro Oliveira",
-    "Mariana Costa",
-    "Rafael Souza",
-    "Beatriz Almeida",
-    "Lucas Pereira"
-  ],
+  guestList: [],
+  sheetConnected: false,
   stripePublishableKey: "pk_test_51Tv4tP46pEfRADDoTQQfgMqZPFRatPVPmHNLyMVKrJfF0A3njHNvcIuStnazcJ6cVWjROG8zABvdoPF7K8nUTgP000Az4b47Cu",
   stripeConnectedAccountId: "",
   functionsBase: "/api"
@@ -1120,10 +1112,16 @@ function normalizeName(s){
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
 }
 
+function findGuestMatch(name){
+  const normalized = normalizeName(name);
+  if(!normalized) return null;
+  return (CONFIG.guestList || []).find(g => normalizeName(g) === normalized) || null;
+}
+
 rnameInput.addEventListener("input", () => {
   const val = rnameInput.value.trim();
-  guestConfirmed = false;
-  nameConfirmed.classList.remove("show");
+  guestConfirmed = Boolean(findGuestMatch(val));
+  nameConfirmed.classList.toggle("show", guestConfirmed);
   if(val.length < 2){ suggestBox.classList.remove("open"); suggestBox.innerHTML = ""; return; }
   const matches = (CONFIG.guestList || []).filter(g => normalizeName(g).includes(normalizeName(val))).slice(0,6);
   if(matches.length === 0){ suggestBox.classList.remove("open"); suggestBox.innerHTML = ""; return; }
@@ -1161,7 +1159,20 @@ const rsvpMsg = document.getElementById("rsvpMsg");
 rsvpForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  if(!guestConfirmed){
+  const typedName = document.getElementById("rname").value.trim();
+  if(!typedName){
+    rsvpMsg.className = "form-msg err";
+    rsvpMsg.textContent = "Escreva seu nome para confirmar.";
+    return;
+  }
+
+  const exactMatch = findGuestMatch(typedName);
+  if(exactMatch){
+    document.getElementById("rname").value = exactMatch;
+    guestConfirmed = true;
+  }
+
+  if(!guestConfirmed && CONFIG.guestList.length > 0){
     rsvpMsg.className = "form-msg err";
     rsvpMsg.textContent = "Selecione seu nome na lista sugerida para confirmar.";
     return;
@@ -1174,7 +1185,7 @@ rsvpForm.addEventListener("submit", async (e) => {
 
   const payload = {
     tipo: "rsvp",
-    nome: document.getElementById("rname").value,
+    nome: document.getElementById("rname").value.trim(),
     dataEnvio: new Date().toLocaleString("pt-BR")
   };
 
@@ -1308,41 +1319,43 @@ function renderGifts(){
     openModal({ id:"free-"+Date.now(), name:"Presente de Valor Livre", price: 0, needsAmount: true });
   });
 }
-renderGifts();
 
-/* ---------- Carrega presentes e lista de convidados da planilha ---------- */
 async function loadConfigFromSheet(){
-  if(!CONFIG.webhookUrl || CONFIG.webhookUrl.includes("COLOQUE_AQUI")) return;
+  if(!CONFIG.webhookUrl || CONFIG.webhookUrl.includes("COLOQUE_AQUI")) return false;
 
   try{
     const res = await fetch(CONFIG.webhookUrl + "?tipo=config");
-    if(!res.ok) return;
+    if(!res.ok) return false;
     const data = await res.json();
+    CONFIG.sheetConnected = true;
 
     if(Array.isArray(data.gifts) && data.gifts.length){
       const cleaned = data.gifts
-        .filter(g => g.id && g.name && g.price)
+        .filter(g => g.id && g.name && g.price !== undefined && g.price !== "")
         .map(g => ({
-          id: String(g.id),
+          id: String(g.id).trim(),
           tag: g.tag || "Presente",
           name: g.name,
           price: Number(g.price),
           icon: g.icon || "dinner"
         }));
-      if(cleaned.length){
-        gifts = cleaned;
-        renderGifts();
-      }
+      if(cleaned.length) gifts = cleaned;
     }
 
-    if(Array.isArray(data.guestList) && data.guestList.length){
+    if(Array.isArray(data.guestList)){
       CONFIG.guestList = data.guestList.filter(Boolean).map(String);
     }
+
+    return true;
   }catch(err){
-    // sem planilha configurada ainda, ou offline — mantém os valores padrão do site
+    return false;
   }
 }
-loadConfigFromSheet();
+
+(async function initSiteFromSheet(){
+  await loadConfigFromSheet();
+  renderGifts();
+})();
 
 /* ---------- Modal ---------- */
 const modalOverlay = document.getElementById("modalOverlay");
@@ -1352,6 +1365,7 @@ let currentPixPayload = "";
 let pendingCheckoutUrl = null;
 let selectedPaymentMethod = null;
 let currentWizardStep = 1;
+let savedGiftMessage = "";
 let wizardNeedsAmount = false;
 let stripeInstance = null;
 let embeddedCheckout = null;
@@ -1432,6 +1446,7 @@ function openModal(gift){
   document.getElementById("giftGiverName").value = "";
   document.getElementById("giverErrorMsg").classList.remove("show");
   document.getElementById("giftMsg").value = "";
+  savedGiftMessage = "";
   document.getElementById("pixQr").innerHTML = `<div class="pay-loading">Gerando Pix&hellip;</div>`;
   document.getElementById("copyPixBtn").disabled = true;
   const pixStatus = document.getElementById("pixStatus");
@@ -1454,7 +1469,44 @@ function getGiftMessage(){
   return document.getElementById("giftMsg").value.trim();
 }
 
+function getPendingGift(){
+  try{
+    const raw = sessionStorage.getItem("pendingGift");
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){
+    return null;
+  }
+}
+
+function captureGiftMessage(){
+  savedGiftMessage = getGiftMessage();
+  return savedGiftMessage;
+}
+
+function savePendingGift(){
+  if(!currentGift) return;
+  captureGiftMessage();
+  sessionStorage.setItem("pendingGift", JSON.stringify({
+    id: currentGift.id,
+    name: currentGift.name,
+    price: currentGift.price,
+    presenteadoPor: getGiverName(),
+    mensagem: savedGiftMessage
+  }));
+}
+
+function resolveGiverName(){
+  const pending = getPendingGift();
+  return getGiverName() || (pending && pending.presenteadoPor) || "";
+}
+
+function resolveGiftMessage(){
+  const pending = getPendingGift();
+  return getGiftMessage() || savedGiftMessage || (pending && pending.mensagem) || "";
+}
+
 function startPaymentStep(){
+  savePendingGift();
   document.getElementById("panelPix").style.display = selectedPaymentMethod === "pix" ? "block" : "none";
   document.getElementById("panelCard").style.display = selectedPaymentMethod === "card" ? "block" : "none";
   goToWizardStep(4);
@@ -1577,13 +1629,7 @@ async function mountStripeCheckout(){
   destroyStripeCheckout();
   container.innerHTML = `<div class="pay-loading">Carregando pagamento seguro&hellip;</div>`;
 
-  sessionStorage.setItem("pendingGift", JSON.stringify({
-    id: currentGift.id,
-    name: currentGift.name,
-    price: currentGift.price,
-    presenteadoPor: getGiverName(),
-    mensagem: getGiftMessage()
-  }));
+  savePendingGift();
 
   try{
     const res = await fetch(CONFIG.functionsBase + "/create-checkout-session", {
@@ -1593,8 +1639,8 @@ async function mountStripeCheckout(){
         amount: currentGift.price,
         giftName: currentGift.name,
         giftId: currentGift.id,
-        presenteadoPor: getGiverName(),
-        mensagem: getGiftMessage()
+        presenteadoPor: resolveGiverName(),
+        mensagem: resolveGiftMessage()
       })
     });
     const data = await res.json();
@@ -1624,15 +1670,19 @@ async function mountStripeCheckout(){
   }
 }
 
-async function completeGiftPayment(origem){
+async function completeGiftPayment(origem, overrides = {}){
   if(!currentGift) return;
+
+  const mensagem = overrides.mensagem !== undefined ? overrides.mensagem : resolveGiftMessage();
+  const presenteadoPor = overrides.presenteadoPor !== undefined ? overrides.presenteadoPor : resolveGiverName();
 
   const payload = {
     tipo: "presente",
     presente: currentGift.name,
     valor: currentGift.price,
-    presenteadoPor: getGiverName(),
-    mensagem: getGiftMessage(),
+    presenteadoPor,
+    mensagem,
+    recado: mensagem,
     origem: origem,
     dataEnvio: new Date().toLocaleString("pt-BR"),
     comprovanteNome: "",
@@ -1641,6 +1691,8 @@ async function completeGiftPayment(origem){
 
   try{ await sendToSheet(payload); }catch(e){ /* segue mesmo sem webhook configurado */ }
 
+  sessionStorage.removeItem("pendingGift");
+  savedGiftMessage = "";
   if(!currentGift.id.startsWith("free-")) givenSet.add(currentGift.id);
   renderGifts();
   goToWizardStep(5);
@@ -1671,16 +1723,19 @@ async function completeGiftPayment(origem){
       }
       if(pending && pending.mensagem){
         document.getElementById("giftMsg").value = pending.mensagem;
+        savedGiftMessage = pending.mensagem;
       }
       document.getElementById("modalGiftName").textContent = currentGift.name;
       document.getElementById("modalGiftPrice").textContent = "R$ " + Number(currentGift.price).toLocaleString("pt-BR");
       modalOverlay.classList.add("open");
-      await completeGiftPayment("Cartão (Stripe)");
+      await completeGiftPayment("Cartão (Stripe)", {
+        mensagem: (pending && pending.mensagem) || "",
+        presenteadoPor: (pending && pending.presenteadoPor) || ""
+      });
     }
   }catch(err){
     // silenciosamente ignora
   }finally{
-    sessionStorage.removeItem("pendingGift");
     params.delete("stripe_session");
     const clean = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
     window.history.replaceState({}, "", clean);
