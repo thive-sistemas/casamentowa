@@ -1145,12 +1145,18 @@ async function sendToSheet(payload){
   if(!CONFIG.webhookUrl || CONFIG.webhookUrl.includes("COLOQUE_AQUI")){
     throw new Error("no-webhook");
   }
-  await fetch(CONFIG.webhookUrl, {
+
+  const res = await fetch(CONFIG.functionsBase + "/send-to-sheet", {
     method: "POST",
-    mode: "no-cors",
-    headers: {"Content-Type":"text/plain;charset=utf-8"},
-    body: JSON.stringify(payload)
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, webhookUrl: CONFIG.webhookUrl })
   });
+
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok || !data.ok){
+    throw new Error(data.error || "sheet-save-failed");
+  }
+  return data;
 }
 
 /* ---------- RSVP form submit ---------- */
@@ -1574,8 +1580,18 @@ document.getElementById("wizardNext2").addEventListener("click", () => {
   document.getElementById("giftMsg").focus();
 });
 
-document.getElementById("wizardNext3").addEventListener("click", startPaymentStep);
-document.getElementById("wizardSkip3").addEventListener("click", startPaymentStep);
+document.getElementById("wizardNext3").addEventListener("click", () => {
+  captureGiftMessage();
+  startPaymentStep();
+});
+document.getElementById("wizardSkip3").addEventListener("click", () => {
+  captureGiftMessage();
+  startPaymentStep();
+});
+
+document.getElementById("giftMsg").addEventListener("input", () => {
+  savedGiftMessage = getGiftMessage();
+});
 
 document.querySelectorAll(".wizard-back-btn").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -1673,8 +1689,8 @@ async function mountStripeCheckout(){
 async function completeGiftPayment(origem, overrides = {}){
   if(!currentGift) return;
 
-  const mensagem = overrides.mensagem !== undefined ? overrides.mensagem : resolveGiftMessage();
-  const presenteadoPor = overrides.presenteadoPor !== undefined ? overrides.presenteadoPor : resolveGiverName();
+  const mensagem = String(overrides.mensagem !== undefined ? overrides.mensagem : resolveGiftMessage()).trim();
+  const presenteadoPor = String(overrides.presenteadoPor !== undefined ? overrides.presenteadoPor : resolveGiverName()).trim();
 
   const payload = {
     tipo: "presente",
@@ -1689,7 +1705,15 @@ async function completeGiftPayment(origem, overrides = {}){
     comprovanteBase64: ""
   };
 
-  try{ await sendToSheet(payload); }catch(e){ /* segue mesmo sem webhook configurado */ }
+  try{
+    await sendToSheet(payload);
+  }catch(e){
+    const pixStatus = document.getElementById("pixStatus");
+    if(pixStatus){
+      pixStatus.className = "pix-status err";
+      pixStatus.textContent = "Pagamento ok, mas não conseguimos salvar na planilha. Avise os noivos pelo WhatsApp.";
+    }
+  }
 
   sessionStorage.removeItem("pendingGift");
   savedGiftMessage = "";
