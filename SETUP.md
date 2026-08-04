@@ -1,10 +1,11 @@
 # Planilha Google — guia completo
 
-## ⚠️ Recado não aparece na coluna Mensagem?
+## Recados (Mensagem) não salvam?
 
-Isso acontece quando o **Apps Script está desatualizado**. O script antigo grava o nome na coluna **Mensagem** e deixa o recado em branco.
-
-**Solução:** copie o arquivo **`apps-script.gs`** deste repositório → Apps Script → **Implantar → Nova versão**.
+1. **Atualize o Apps Script** — cole [`apps-script.gs`](apps-script.gs) → **Implantar → Nova versão**
+2. Teste: após um POST, a resposta deve incluir `"scriptVersion": 2`
+3. Coluna **Mensagem** ou **Recado** na aba Presentes (linha 1)
+4. O site também envia o recado em **Origem** como backup (`Pix | Recado: ...`)
 
 ---
 
