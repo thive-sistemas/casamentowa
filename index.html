@@ -1689,8 +1689,12 @@ async function mountStripeCheckout(){
 async function completeGiftPayment(origem, overrides = {}){
   if(!currentGift) return;
 
-  const mensagem = String(overrides.mensagem !== undefined ? overrides.mensagem : resolveGiftMessage()).trim();
-  const presenteadoPor = String(overrides.presenteadoPor !== undefined ? overrides.presenteadoPor : resolveGiverName()).trim();
+  const mensagem = String(
+    overrides.mensagem !== undefined ? overrides.mensagem : resolveGiftMessage()
+  ).trim();
+  const presenteadoPor = String(
+    overrides.presenteadoPor !== undefined ? overrides.presenteadoPor : resolveGiverName()
+  ).trim();
 
   const payload = {
     tipo: "presente",
@@ -1699,7 +1703,8 @@ async function completeGiftPayment(origem, overrides = {}){
     presenteadoPor,
     mensagem,
     recado: mensagem,
-    origem: origem,
+    mensagemParaNoivos: mensagem,
+    origem: mensagem ? `${origem} | Recado: ${mensagem}` : origem,
     dataEnvio: new Date().toLocaleString("pt-BR"),
     comprovanteNome: "",
     comprovanteBase64: ""
@@ -1753,8 +1758,8 @@ async function completeGiftPayment(origem, overrides = {}){
       document.getElementById("modalGiftPrice").textContent = "R$ " + Number(currentGift.price).toLocaleString("pt-BR");
       modalOverlay.classList.add("open");
       await completeGiftPayment("Cartão (Stripe)", {
-        mensagem: (pending && pending.mensagem) || "",
-        presenteadoPor: (pending && pending.presenteadoPor) || ""
+        mensagem: (pending && pending.mensagem) || data.mensagem || "",
+        presenteadoPor: (pending && pending.presenteadoPor) || data.presenteadoPor || ""
       });
     }
   }catch(err){

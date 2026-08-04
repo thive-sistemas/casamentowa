@@ -1,6 +1,5 @@
 /**
- * Cole este arquivo em Extensões → Apps Script na planilha.
- * Salve → Implantar → Gerenciar implantações → Editar → Nova versão → Implantar
+ * Cole em Extensões → Apps Script → Salvar → Implantar → Nova versão
  */
 
 function normalizeHeader(value) {
@@ -11,55 +10,53 @@ function normalizeHeader(value) {
     .trim();
 }
 
-function appendRowByHeaders(sheet, fieldMap) {
-  const lastCol = Math.max(sheet.getLastColumn(), 1);
-  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  const row = new Array(headers.length).fill("");
+function headerMatches(header, aliases) {
+  var h = normalizeHeader(header);
+  if (!h) return false;
+  for (var i = 0; i < aliases.length; i++) {
+    var alias = normalizeHeader(aliases[i]);
+    if (h === alias || h.indexOf(alias) !== -1 || alias.indexOf(h) !== -1) return true;
+  }
+  return false;
+}
 
-  Object.keys(fieldMap).forEach(function(key) {
-    const aliases = key.split("|").map(normalizeHeader);
-    const value = fieldMap[key];
-    for (var i = 0; i < headers.length; i++) {
-      var header = normalizeHeader(headers[i]);
-      if (aliases.indexOf(header) !== -1) {
-        row[i] = value;
-        break;
-      }
+function setFieldByHeaders(headers, row, aliases, value) {
+  for (var i = 0; i < headers.length; i++) {
+    if (headerMatches(headers[i], aliases)) {
+      row[i] = value;
+      return true;
     }
-  });
-
-  sheet.appendRow(row);
+  }
+  return false;
 }
 
 function appendPresenteRow(sheet, data, comprovanteLink) {
-  var mensagem = data.mensagem || data.recado || "";
+  var mensagem = String(data.mensagem || data.recado || data.mensagemParaNoivos || "").trim();
   var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
-  var normalized = headers.map(normalizeHeader);
+  var row = new Array(headers.length).fill("");
 
-  var hasMensagemCol = normalized.indexOf("mensagem") !== -1 || normalized.indexOf("recado") !== -1;
+  var mensagemSalva = setFieldByHeaders(headers, row, ["mensagem", "recado", "message", "carinho", "texto", "msg"], mensagem);
+  setFieldByHeaders(headers, row, ["data"], data.dataEnvio);
+  setFieldByHeaders(headers, row, ["presente"], data.presente);
+  setFieldByHeaders(headers, row, ["valor"], data.valor);
+  setFieldByHeaders(headers, row, ["presenteado por", "presenteadopor", "quem deu", "nome"], data.presenteadoPor || "");
+  setFieldByHeaders(headers, row, ["comprovante"], comprovanteLink);
+  setFieldByHeaders(headers, row, ["origem"], data.origem || "Pix");
 
-  if (hasMensagemCol) {
-    appendRowByHeaders(sheet, {
-      "Data": data.dataEnvio,
-      "Presente": data.presente,
-      "Valor": data.valor,
-      "Presenteado por|Quem deu|Presenteadopor": data.presenteadoPor || "",
-      "Mensagem|Recado": mensagem,
-      "Comprovante": comprovanteLink,
-      "Origem": data.origem || "Pix"
-    });
-    return;
+  // Se não achou coluna Mensagem/Recado, grava no fim ou em Origem
+  if (mensagem && !mensagemSalva) {
+    var origemIdx = -1;
+    for (var j = 0; j < headers.length; j++) {
+      if (headerMatches(headers[j], ["origem"])) origemIdx = j;
+    }
+    if (origemIdx !== -1) {
+      row[origemIdx] = (row[origemIdx] || data.origem || "Pix") + " | Recado: " + mensagem;
+    } else {
+      row[row.length - 1] = mensagem;
+    }
   }
 
-  // Planilha antiga com 6 colunas (sem Presenteado por)
-  sheet.appendRow([
-    data.dataEnvio,
-    data.presente,
-    data.valor,
-    mensagem,
-    comprovanteLink,
-    data.origem || "Pix"
-  ]);
+  sheet.appendRow(row);
 }
 
 function doGet(e) {
@@ -88,8 +85,8 @@ function doGet(e) {
     var guestSheet = ss.getSheetByName("Convidados");
     if (guestSheet) {
       var guestData = guestSheet.getDataRange().getValues();
-      for (var j = 1; j < guestData.length; j++) {
-        if (guestData[j][0]) guestList.push(String(guestData[j][0]).trim());
+      for (var k = 1; k < guestData.length; k++) {
+        if (guestData[k][0]) guestList.push(String(guestData[k][0]).trim());
       }
     }
 
@@ -106,10 +103,12 @@ function doPost(e) {
   if (data.tipo === "rsvp") {
     var rsvpSheet = ss.getSheetByName("RSVP");
     if (!rsvpSheet) return jsonResponse({ status: "error", error: "Aba RSVP não encontrada" });
-    appendRowByHeaders(rsvpSheet, {
-      "Data": data.dataEnvio,
-      "Nome": data.nome
-    });
+    var headers = rsvpSheet.getRange(1, 1, 1, Math.max(rsvpSheet.getLastColumn(), 1)).getValues()[0];
+    var row = new Array(headers.length).fill("");
+    setFieldByHeaders(headers, row, ["data"], data.dataEnvio);
+    setFieldByHeaders(headers, row, ["nome"], data.nome);
+    rsvpSheet.appendRow(row);
+
   } else if (data.tipo === "presente") {
     var presentesSheet = ss.getSheetByName("Presentes");
     if (!presentesSheet) return jsonResponse({ status: "error", error: "Aba Presentes não encontrada" });
@@ -132,7 +131,8 @@ function doPost(e) {
     appendPresenteRow(presentesSheet, data, comprovanteLink);
   }
 
-  return jsonResponse({ status: "ok", mensagemRecebida: data.mensagem || data.recado || "" });
+  var msg = data.mensagem || data.recado || "";
+  return jsonResponse({ status: "ok", mensagemRecebida: msg, scriptVersion: 2 });
 }
 
 function jsonResponse(obj) {
