@@ -212,6 +212,14 @@
     filter:saturate(1.06) contrast(1.04) brightness(0.98);
   }
   .carousel-bg .slide.active{opacity:1; transform:scale(1);}
+
+  @media (min-width: 1025px){
+    .carousel-bg .slide{
+      object-position:center 18%;
+      transform:scale(1.02);
+    }
+    .carousel-bg .slide.active{transform:scale(1);}
+  }
   .about-overlay{
     position:absolute; inset:0; z-index:1; pointer-events:none;
     background:
