@@ -30,6 +30,7 @@ loadEnvLocal();
 const createCheckout = require("./api/create-checkout-session");
 const verifyCheckout = require("./api/verify-checkout-session");
 const sendToSheet = require("./api/send-to-sheet");
+const stripeStatus = require("./api/stripe-status");
 
 const PORT = Number(process.env.PORT) || 3001;
 const MIME = {
@@ -119,6 +120,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/send-to-sheet") {
       req.body = await readBody(req);
       return sendToSheet(req, createResAdapter(res));
+    }
+
+    if (url.pathname === "/api/stripe-status") {
+      return stripeStatus(req, createResAdapter(res));
     }
 
     serveStatic(req, res, url);
