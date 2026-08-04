@@ -34,18 +34,6 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const account = connectOptions
-      ? await stripe.accounts.retrieve(connectOptions.stripeAccount)
-      : await stripe.accounts.retrieve();
-
-    if (!account.charges_enabled) {
-      res.status(400).json({
-        error:
-          "A conta Stripe ainda não está liberada para receber cartão. Complete a verificação no Dashboard Stripe (Settings → Account) e aguarde aprovação.",
-      });
-      return;
-    }
-
     const origin = req.headers.origin || `https://${req.headers.host}`;
 
     const session = await stripe.checkout.sessions.create(

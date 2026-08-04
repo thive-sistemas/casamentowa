@@ -532,18 +532,6 @@
     font-weight:600; cursor:pointer; padding:6px 0; text-align:center; width:100%;
   }
   .method-card.selected{border-color:var(--purple); background:var(--lilac-veil); box-shadow:0 0 0 1px var(--purple);}
-  .method-card.disabled{
-    opacity:.45; cursor:not-allowed; pointer-events:none;
-    border-color:var(--line); background:var(--ivory);
-  }
-  .card-unavailable-note{
-    display:none; margin-top:14px; padding:12px 14px;
-    font-size:0.82rem; line-height:1.55; color:var(--ink-soft);
-    background:rgba(183,168,206,0.15); border:1px solid var(--line);
-    text-align:center;
-  }
-  .card-unavailable-note.show{display:block;}
-  .card-unavailable-note a{color:var(--purple); font-weight:600;}
   .wizard-success{
     text-align:center; padding:12px 0 4px;
   }
@@ -942,19 +930,14 @@
           <span class="method-label">Pix</span>
           <span class="method-sub">QR Code instantâneo</span>
         </button>
-        <button type="button" class="method-card" data-method="card" id="cardMethodBtn">
+        <button type="button" class="method-card" data-method="card">
           <span class="method-ico">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="5" width="19" height="14" rx="2" stroke="currentColor" stroke-width="1.4"/><line x1="2.5" y1="9.5" x2="21.5" y2="9.5" stroke="currentColor" stroke-width="1.4"/></svg>
           </span>
           <span class="method-label">Cartão</span>
-          <span class="method-sub" id="cardMethodSub">Crédito ou débito</span>
+          <span class="method-sub">Crédito ou débito</span>
         </button>
       </div>
-      <p class="card-unavailable-note" id="cardUnavailableNote">
-        Cartão temporariamente indisponível — a Stripe ainda está analisando a conta.
-        Use <strong>Pix</strong> por enquanto ou complete o cadastro em
-        <a href="https://dashboard.stripe.com/settings/account" target="_blank" rel="noopener">dashboard.stripe.com</a>.
-      </p>
       <div class="wizard-actions">
         <button type="button" class="wizard-next-btn" id="wizardNext2" disabled>Continuar</button>
         <button type="button" class="wizard-back-btn" data-back="1">&larr; Voltar</button>
@@ -1400,44 +1383,6 @@ let savedGiftMessage = "";
 let wizardNeedsAmount = false;
 let stripeInstance = null;
 let embeddedCheckout = null;
-let stripeCardAvailable = true;
-
-async function loadStripeCardStatus(){
-  try{
-    const res = await fetch(CONFIG.functionsBase + "/stripe-status");
-    if(!res.ok) return;
-    const data = await res.json();
-    stripeCardAvailable = Boolean(data.cardEnabled);
-    updateCardMethodUI();
-  }catch(e){
-    stripeCardAvailable = true;
-  }
-}
-
-function updateCardMethodUI(){
-  const cardBtn = document.getElementById("cardMethodBtn");
-  const note = document.getElementById("cardUnavailableNote");
-  const sub = document.getElementById("cardMethodSub");
-  if(!cardBtn || !note) return;
-
-  if(stripeCardAvailable){
-    cardBtn.classList.remove("disabled");
-    note.classList.remove("show");
-    if(sub) sub.textContent = "Crédito ou débito";
-    return;
-  }
-
-  cardBtn.classList.add("disabled");
-  note.classList.add("show");
-  if(sub) sub.textContent = "Em breve";
-  if(selectedPaymentMethod === "card"){
-    selectedPaymentMethod = null;
-    cardBtn.classList.remove("selected");
-    document.getElementById("wizardNext2").disabled = true;
-  }
-}
-
-loadStripeCardStatus();
 
 function initStripeInstance(){
   if(!window.Stripe || !CONFIG.stripePublishableKey || CONFIG.stripePublishableKey.includes("COLOQUE")) return null;
@@ -1508,7 +1453,6 @@ function resetWizard(){
 
 function openModal(gift){
   currentGift = gift;
-  loadStripeCardStatus();
   document.getElementById("modalGiftName").textContent = gift.name;
   document.getElementById("modalGiftPrice").textContent = gift.price > 0
     ? "R$ " + gift.price.toLocaleString("pt-BR")
@@ -1631,7 +1575,6 @@ document.getElementById("giftGiverName").addEventListener("keydown", (e) => {
 
 document.querySelectorAll(".method-card").forEach(btn => {
   btn.addEventListener("click", () => {
-    if(btn.classList.contains("disabled")) return;
     selectedPaymentMethod = btn.dataset.method;
     document.querySelectorAll(".method-card").forEach(b => b.classList.remove("selected"));
     btn.classList.add("selected");
